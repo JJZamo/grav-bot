@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="GRAV-BOT">
+<meta name="theme-color" content="#ffffff">
+<title>GRAV-BOT</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { touch-action:none; overscroll-behavior:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  body {
+    background:#fff;
+    display:flex; align-items:center; justify-content:center;
+    height:100vh; font-family:'Share Tech Mono',monospace;
+    overflow:hidden; cursor:pointer; user-select:none;
+  }
+
+  /* ── Force landscape ── */
+  #rotate-screen {
+    display:none;
+    position:fixed; inset:0; background:#fff; z-index:100;
+    flex-direction:column; align-items:center; justify-content:center; gap:20px;
+  }
+  #rotate-screen.show { display:flex; }
+  #rotate-icon {
+    font-size:48px; animation: rotateHint 1.4s ease-in-out infinite;
+  }
+  @keyframes rotateHint {
+    0%,100% { transform:rotate(0deg); }
+    50%      { transform:rotate(90deg); }
+  }
+  #rotate-msg {
+    font-size:12px; letter-spacing:0.22em; color:#888; text-align:center; line-height:2;
+  }
+
+  #ui {
+    position:fixed; top:20px; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:0 28px; z-index:10; pointer-events:none;
+  }
+  #score-label { font-size:10px; letter-spacing:0.22em; color:#bbb; }
+  #score       { font-size:30px; color:#111; letter-spacing:0.05em; line-height:1; }
+  #level-badge {
+    font-size:10px; letter-spacing:0.18em; color:#888;
+    border:1px solid #ddd; padding:4px 10px; margin-top:4px;
+  }
+  #hint { font-size:10px; letter-spacing:0.18em; color:#bbb; text-align:right; line-height:2; }
+  canvas { display:block; image-rendering:pixelated; }
+
+  /* ── Pause button ── */
+  #pause-btn {
+    position:fixed; top:18px; left:50%; transform:translateX(-50%);
+    z-index:11; pointer-events:all;
+    background:none; border:1px solid #ddd; cursor:pointer;
+    font-family:'Share Tech Mono',monospace; font-size:10px;
+    letter-spacing:0.2em; color:#bbb; padding:5px 14px;
+    display:none;
+  }
+  #pause-btn:hover { border-color:#aaa; color:#555; }
+  #pause-btn.visible { display:block; }
+
+  /* ── Pause overlay ── */
+  #pause-screen {
+    position:fixed; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; pointer-events:none; opacity:0; transition:opacity 0.2s; z-index:18;
+    background:rgba(255,255,255,0.88);
+  }
+  #pause-screen.visible { opacity:1; pointer-events:all; }
+  #pause-title  { font-size:36px; color:#111; letter-spacing:0.1em; }
+  #resume-btn   {
+    font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:0.2em;
+    background:#111; color:#fff; border:none; padding:12px 30px; cursor:pointer;
+  }
+  #resume-btn:hover { background:#333; }
+
+  #death-screen {
+    position:fixed; inset:0; background:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; opacity:0; pointer-events:none; transition:opacity 0.35s; z-index:20;
+  }
+  #death-screen.visible { opacity:1; pointer-events:all; }
+  #death-title  { font-size:38px; color:#111; letter-spacing:0.08em; }
+  #death-reason { font-size:11px; color:#aaa; letter-spacing:0.22em; }
+  #death-score  { font-size:13px; color:#888; letter-spacing:0.2em; }
+  #death-best   { font-size:13px; color:#444; letter-spacing:0.2em; }
+  #restart-btn  {
+    margin-top:14px; font-family:'Share Tech Mono',monospace;
+    font-size:12px; letter-spacing:0.2em; background:#111; color:#fff;
+    border:none; padding:12px 30px; cursor:pointer; pointer-events:all;
+  }
+  #restart-btn:hover { background:#333; }
+
+  #wave-banner {
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-size:22px; letter-spacing:0.25em; color:#111;
+    opacity:0; pointer-events:none; z-index:15;
+    transition:opacity 0.2s;
+  }
+  #wave-banner.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<div id="rotate-screen">
+  <div id="rotate-icon">📱</div>
+  <div id="rotate-msg">ROTATE DEVICE<br>TO LANDSCAPE</div>
+</div>
+
+<div id="ui">
+  <div>
+    <div id="score-label">SCORE</div>
+    <div id="score">0</div>
+    <div id="level-badge">LEVEL 1</div>
+  </div>
+  <div id="hint">CLICK / SPACE<br>FLIP GRAVITY</div>
+</div>
+
+<button id="pause-btn">❚❚ PAUSE</button>
+
+<canvas id="c"></canvas>
+
+<div id="wave-banner"></div>
+
+<div id="pause-screen">
+  <div id="pause-title">PAUSED</div>
+  <button id="resume-btn">RESUME</button>
+</div>
+
+<div id="death-screen">
+  <div id="death-title">SYSTEM HALT</div>
+  <div id="death-reason"></div>
+  <div id="death-score">SCORE — <span id="ds">0</span></div>
+  <div id="death-best">BEST  — <span id="db">0</span></div>
+  <button id="restart-btn">REBOOT</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  PIXEL SPRITES  (8×8, 1=black)
+// ═══════════════════════════════════════════════════════════
+const ROBOT_RUN = [
+  [ // frame 0 – left foot
+    0,1,1,1,1,1,1,0,
+    0,1,0,1,1,0,1,0,
+    0,1,1,1,1,1,1,0,
+    0,0,1,1,1,1,0,0,
+    0,1,1,1,1,1,1,0,
+    1,1,0,1,1,0,1,1,
+    0,0,0,1,1,0,0,0,
+    0,0,1,0,0,0,0,0,
+  ],
+  [ // frame 1 – right foot
+    0,1,1,1,1,1,1,0,
+    0,1,0,1,1,0,1,0,
+    0,1,1,1,1,1,1,0,
+    0,0,1,1,1,1,0,0,
+    0,1,1,1,1,1,1,0,
+    1,1,0,1,1,0,1,1,
+    0,0,0,1,1,0,0,0,
+    0,0,0,0,0,1,0,0,
+  ],
+  [ // frame 2 – mid stride
+    0,1,1,1,1,1,1,0,
+    0,1,1,1,1,1,1,0,
+    0,1,0,1,1,0,1,0,
+    0,0,1,1,1,1,0,0,
+    0,1,1,1,1,1,1,0,
+    0,1,0,1,1,0,1,0,
+    0,0,1,0,0,1,0,0,
+    0,0,0,0,0,0,0,0,
+  ],
+];
+
+// Enemy robot (hostile, different head + X eyes)
+const ENEMY_FRAMES = [
+  [
+    0,1,1,1,1,1,1,0,
+    0,1,1,0,0,1,1,0,  // X eyes
+    0,1,0,1,1,0,1,0,
+    0,0,1,1,1,1,0,0,
+    0,1,1,0,0,1,1,0,
+    1,0,1,1,1,1,0,1,
+    0,0,1,0,0,1,0,0,
+    0,1,0,0,0,0,1,0,
+  ],
+  [
+    0,1,1,1,1,1,1,0,
+    0,1,1,0,0,1,1,0,
+    0,1,0,1,1,0,1,0,
+    0,0,1,1,1,1,0,0,
+    0,1,0,1,1,0,1,0,
+    1,0,1,1,1,1,0,1,
+    0,0,0,1,1,0,0,0,
+    0,0,0,0,0,0,1,0,
+  ],
+];
+
+// Spike — thin sharp spike: single-pixel tip, narrow 3-pixel body
+const SPIKE_UP = [
+  0,0,0,1,0,0,0,0,  // single-pixel tip
+  0,0,0,1,0,0,0,0,
+  0,0,1,1,1,0,0,0,
+  0,0,1,1,1,0,0,0,
+  0,0,1,1,1,0,0,0,
+  0,1,1,1,1,1,0,0,
+  1,1,1,1,1,1,1,0,  // base
+  1,1,1,1,1,1,1,0,
+];
+
+// Crate (box)
+const CRATE = [
+  1,1,1,1,1,1,1,1,
+  1,0,0,1,1,0,0,1,
+  1,0,0,1,1,0,0,1,
+  1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,
+  1,0,0,1,1,0,0,1,
+  1,0,0,1,1,0,0,1,
+  1,1,1,1,1,1,1,1,
+];
+
+// Wide crate — 2×RS wide, drawn as two crates side by side (reuses CRATE sprite twice)
+// No separate pixel data needed; wideCrate is assembled in drawObstacles
+
+// Saw blade (circular)
+const SAW = [
+  0,0,1,1,1,1,0,0,
+  0,1,1,0,0,1,1,0,
+  1,1,0,1,1,0,1,1,
+  1,0,1,1,1,1,0,1,
+  1,0,1,1,1,1,0,1,
+  1,1,0,1,1,0,1,1,
+  0,1,1,0,0,1,1,0,
+  0,0,1,1,1,1,0,0,
+];
+
+// Laser emitter
+const LASER_EMITTER = [
+  0,1,1,1,1,1,1,0,
+  1,1,0,0,0,0,1,1,
+  1,0,1,0,0,1,0,1,
+  1,0,0,1,1,0,0,1,
+  1,1,1,1,1,1,1,1,
+  0,1,1,0,0,1,1,0,
+  0,0,1,1,1,1,0,0,
+  0,0,0,1,1,0,0,0,
+];
+
+// Missile
+const MISSILE = [
+  0,0,0,0,1,0,0,0,
+  0,0,0,1,1,1,0,0,
+  0,0,1,1,1,1,1,0,
+  1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,
+  0,0,1,1,1,1,1,0,
+  0,0,1,0,0,0,1,0,
+  0,1,0,0,0,0,0,1,
+];
+
+// ═══════════════════════════════════════════════════════════
+//  CANVAS + CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+const SCALE = 4;
+const RS    = 8 * SCALE;  // robot size (32px)
+
+let W, H, FLOOR, CEIL, ZONE;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  // Triple gap vs original: now ~90px half-gap each side
+  FLOOR = H / 2 + 90;
+  CEIL  = H / 2 - 90;
+  ZONE  = FLOOR - CEIL;  // playable height
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DIFFICULTY TIERS
+// ═══════════════════════════════════════════════════════════
+const TIERS = [
+  // Pools unlock every 2 levels. spawnMin already -30% vs previous.
+  // L1: crate only
+  // L3: +spike
+  // L5: +stackedCrate
+  // L7: +wideCrate
+  // L9: +enemy
+  // L11: +saw
+  // L13: +laser
+  // L15: +missile
+  { at:0,   label:'LEVEL 1',             speed:5.0, grav:0.54, spawnMin:37, pool:['crate'], dual:0.04 },
+  { at:8,   label:'LEVEL 2',             speed:5.35, grav:0.55, spawnMin:35, pool:['crate'], dual:0.06 },
+  { at:16,  label:'LEVEL 3',             speed:5.72, grav:0.55, spawnMin:33, pool:['crate','spike'], dual:0.08 },
+  { at:25,  label:'LEVEL 4',             speed:6.13, grav:0.56, spawnMin:30, pool:['crate','spike'], dual:0.1 },
+  { at:35,  label:'LEVEL 5',             speed:6.55, grav:0.56, spawnMin:29, pool:['crate','spike','stackedCrate'], dual:0.12 },
+  { at:46,  label:'LEVEL 6',             speed:7.01, grav:0.57, spawnMin:26, pool:['crate','spike','stackedCrate'], dual:0.14 },
+  { at:58,  label:'LEVEL 7',             speed:7.5, grav:0.57, spawnMin:25, pool:['crate','spike','stackedCrate','wideCrate'], dual:0.15 },
+  { at:71,  label:'LEVEL 8',             speed:8.03,grav:0.58, spawnMin:23, pool:['crate','spike','stackedCrate','wideCrate'], dual:0.17 },
+  { at:85,  label:'LEVEL 9',             speed:8.59,grav:0.58, spawnMin:22, pool:['crate','spike','stackedCrate','wideCrate','enemy'], dual:0.18 },
+  { at:100, label:'LEVEL 10',            speed:9.19,grav:0.59, spawnMin:21, pool:['crate','spike','stackedCrate','wideCrate','enemy'], dual:0.19 },
+  { at:116, label:'LEVEL 11',            speed:9.84,grav:0.59, spawnMin:20, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw'], dual:0.2 },
+  { at:133, label:'LEVEL 12',            speed:10.52,grav:0.60, spawnMin:19, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw'], dual:0.21 },
+  { at:151, label:'LEVEL 13',            speed:11.26,grav:0.60, spawnMin:18, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser'], dual:0.22 },
+  { at:170, label:'LEVEL 14',            speed:12.05,grav:0.61, spawnMin:17, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser'], dual:0.23 },
+  { at:190, label:'LEVEL 15',            speed:12.89,grav:0.61, spawnMin:17, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser','missile'], dual:0.24 },
+  { at:211, label:'LEVEL 16',            speed:13.8,grav:0.62, spawnMin:15, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser','missile'], dual:0.25 },
+  { at:233, label:'LEVEL 17',            speed:14.76,grav:0.62, spawnMin:15, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser','missile'], dual:0.26 },
+  { at:256, label:'LEVEL 18',            speed:15.79,grav:0.63, spawnMin:13, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser','missile'], dual:0.27 },
+  { at:280, label:'LEVEL 19',            speed:16.9,grav:0.63, spawnMin:13, pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser','missile'], dual:0.28 },
+  { at:305, label:'LEVEL 20 — OBLIVION', speed:18.08,grav:0.64, spawnMin:12,  pool:['crate','spike','stackedCrate','wideCrate','enemy','saw','laser','missile'], dual:0.3 },
+];
+
+function getTier(s) {
+  let t = TIERS[0];
+  for (let i=0;i<TIERS.length;i++) if (s >= TIERS[i].at) t = TIERS[i];
+  return t;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════════
+let robot, obstacles, particles, lasers, score, bestScore,
+    alive, animT, frameIdx, spawnTimer, spawnInterval,
+    sawRot, tier, lastTierLabel;
+
+bestScore = 0;
+
+function initGame() {
+  robot = { x: W*0.15, y: FLOOR - RS, vy:0, gravDir:1, spinning:false, spinT:0, spinDur:18 };
+  obstacles     = [];
+  particles     = [];
+  lasers        = [];
+  score         = 0;
+  alive         = true;
+  animT         = 0;
+  frameIdx      = 0;
+  spawnTimer    = 0;
+  spawnInterval = 64;
+  sawRot        = 0;
+  bgScrollX     = 0;
+  trailPositions = [];
+  wakeParticles  = [];
+  tier          = TIERS[0];
+  lastTierLabel = '';
+
+  document.getElementById('score').textContent   = '0';
+  document.getElementById('level-badge').textContent = tier.label;
+  document.getElementById('death-screen').classList.remove('visible');
+  document.getElementById('pause-screen').classList.remove('visible');
+  document.getElementById('pause-btn').textContent = '❚❚ PAUSE';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  OBSTACLE FACTORY
+// ═══════════════════════════════════════════════════════════
+function makeObstacle(type, onCeil) {
+  const base = { x: W + 40, onCeil, passed:false, type, animT:0 };
+
+  switch (type) {
+    case 'spike':
+      return { ...base, w: RS, h: RS,
+               y: onCeil ? CEIL : FLOOR - RS,
+               spikeReveal: 0 };
+
+    case 'crate':
+      return { ...base, w: RS, h: RS,
+               y: onCeil ? CEIL : FLOOR - RS };
+
+    case 'stackedCrate': {
+      const h = RS * 2;
+      return { ...base, w: RS, h,
+               y: onCeil ? CEIL : FLOOR - h };
+    }
+
+    case 'wideCrate': {
+      // 2×RS wide, 2×RS tall — big blocker
+      const w = RS * 2, h = RS * 2;
+      return { ...base, w, h,
+               y: onCeil ? CEIL : FLOOR - h };
+    }
+
+    case 'enemy': {
+      // Schedule 2 shots at random times, at least 40 frames apart, within first 180 frames of life
+      const shot1 = 30 + Math.floor(Math.random() * 60);        // 30–89
+      const shot2 = shot1 + 40 + Math.floor(Math.random() * 40); // shot1+40 to shot1+79
+      return { ...base, w: RS, h: RS,
+               y: onCeil ? CEIL : FLOOR - RS,
+               frame:0, eAnimT:0,
+               shotTimes: [shot1, shot2],
+               bullets: [] };
+    }
+
+    case 'saw': {
+      // floats in middle of zone, bobs up/down
+      const midY = (CEIL + FLOOR) / 2 - RS/2;
+      return { ...base, w: RS, h: RS,
+               y: midY, baseY: midY,
+               bobAmp: ZONE * 0.25, bobSpeed: 0.04 + Math.random()*0.02 };
+    }
+
+    case 'laser': {
+      // emitter on surface, shoots a horizontal beam
+      return { ...base, w: RS*0.9, h: RS*0.9,
+               y: onCeil ? CEIL : FLOOR - RS*0.9,
+               beamActive: true, beamPhase: Math.random()*Math.PI*2,
+               beamPeriod: 90 + Math.floor(Math.random()*60) };
+    }
+
+    case 'missile': {
+      // moves from right to left at extra speed, mid-height
+      const midY = (CEIL + FLOOR)/2 - RS/2 + (Math.random()-0.5)*(ZONE*0.4);
+      return { ...base, w: RS*1.2, h: RS*0.8,
+               y: midY, extraSpeedMult: 1.6 };
+    }
+  }
+}
+
+const SINGLE_INSTANCE_TYPES = new Set(['enemy', 'laser']);
+
+function typeOnScreen(type) {
+  return obstacles.some(o => o.type === type && o.x + o.w > 0);
+}
+
+function spawnWave() {
+  const t    = getTier(score);
+  const pool = t.pool;
+
+  // Pick a type that isn't blocked by single-instance rule
+  let type = null;
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  for (const candidate of shuffled) {
+    if (SINGLE_INSTANCE_TYPES.has(candidate) && typeOnScreen(candidate)) continue;
+    type = candidate;
+    break;
+  }
+  if (!type) return;  // all candidates blocked — skip wave
+
+  const onCeil = (type === 'saw' || type === 'missile') ? false : (Math.random() < 0.5);
+  obstacles.push(makeObstacle(type, onCeil));
+
+  // Dual: second obstacle on opposite surface, staggered
+  if (Math.random() < t.dual && type !== 'saw' && type !== 'missile') {
+    // Also respect single-instance for dual type
+    const dualPool = pool.filter(p => {
+      if (p === 'saw' || p === 'missile') return false;
+      if (SINGLE_INSTANCE_TYPES.has(p) && typeOnScreen(p)) return false;
+      return true;
+    });
+    if (dualPool.length > 0) {
+      const type2 = dualPool[Math.floor(Math.random() * dualPool.length)];
+      const o2 = makeObstacle(type2, !onCeil);
+      o2.x += RS * 3.5 + Math.random() * RS;
+      obstacles.push(o2);
+    }
+  }
+
+  // Post-spawn overlap check — off-screen only
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    if (obstacles[i].x <= W) continue;
+    const a = obstacles[i];
+    for (let j = 0; j < i; j++) {
+      const b = obstacles[j];
+      if (b.type === 'saw' || b.type === 'missile') continue;
+      if (a.type === 'saw' || a.type === 'missile') continue;
+      if (a.onCeil === b.onCeil) continue;
+      const aL = a.x, aR = a.x + a.w;
+      const bL = b.x, bR = b.x + b.w;
+      if (aL < bR && aR > bL) {
+        obstacles.splice(Math.random() < 0.5 ? i : j, 1);
+        break;
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PARTICLES
+// ═══════════════════════════════════════════════════════════
+function burst(px, py, n, speed=3) {
+  for (let i=0;i<n;i++) {
+    const a = Math.random()*Math.PI*2;
+    const s = (0.5 + Math.random()) * speed;
+    particles.push({ x:px, y:py, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:1 });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FLIP
+// ═══════════════════════════════════════════════════════════
+function flip() {
+  if (!alive) return;
+  const prevDir = robot.gravDir;
+  robot.gravDir *= -1;
+  robot.vy = -15 * robot.gravDir;
+
+  // Spin animation: 18-frame full rotation
+  robot.spinning    = true;
+  robot.spinT       = 0;
+  robot.spinDur     = 18;
+  robot.spinDir     = prevDir; // which way it was going when flipped
+
+  // Directional dust kick — from feet, downward if was on floor, upward if was on ceiling
+  const feetY   = prevDir === 1 ? robot.y + RS : robot.y;   // feet position before flip
+  const dustDir = prevDir === 1 ? 1 : -1;                   // particles go away from surface
+  for (let i = 0; i < 6; i++) {
+    const spread = (Math.random() - 0.5) * 2.2;             // mostly horizontal spread
+    const speed  = 1.2 + Math.random() * 2.0;
+    particles.push({
+      x: robot.x + RS * (0.2 + Math.random() * 0.6),
+      y: feetY,
+      vx: spread,
+      vy: dustDir * speed,
+      life: 1,
+      isDust: true,
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WAVE BANNER
+// ═══════════════════════════════════════════════════════════
+let bannerTimeout;
+function showBanner(txt) {
+  const el = document.getElementById('wave-banner');
+  el.textContent = txt;
+  el.classList.add('show');
+  clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => el.classList.remove('show'), 1600);
+}
+function hideBanner() {
+  clearTimeout(bannerTimeout);
+  document.getElementById('wave-banner').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DIE
+// ═══════════════════════════════════════════════════════════
+const OBSTACLE_NAMES = {
+  spike:'SPIKE COLLISION', crate:'CRATE IMPACT',
+  stackedCrate:'STACK CRUSH', wideCrate:'WIDE CRATE CRUSH', enemy:'ENEMY CONTACT',
+  saw:'SAW BLADE', laser:'LASER BEAM', missile:'MISSILE HIT',
+  wall:'WALL CRASH',
+};
+
+function die(reason) {
+  if (!alive) return;
+  alive = false;
+  gameState = 'dead';
+  document.getElementById('pause-btn').classList.remove('visible');
+  burst(robot.x + RS/2, robot.y + RS/2, 32, 4);
+  if (score > bestScore) bestScore = score;
+  setTimeout(() => {
+    document.getElementById('ds').textContent = score;
+    document.getElementById('db').textContent = bestScore;
+    document.getElementById('death-reason').textContent = OBSTACLE_NAMES[reason] || '';
+    document.getElementById('death-screen').classList.add('visible');
+  }, 700);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UPDATE
+// ═══════════════════════════════════════════════════════════
+function update() {
+  if (!alive) {
+    // particles still update
+    for (let p of particles) { p.x+=p.vx; p.y+=p.vy; p.life-=0.05; }
+    particles = particles.filter(p=>p.life>0);
+    return;
+  }
+
+  // difficulty tier
+  const newTier = getTier(score);
+  if (newTier.label !== lastTierLabel) {
+    lastTierLabel = newTier.label;
+    tier = newTier;
+    document.getElementById('level-badge').textContent = tier.label;
+    if (score > 0) showBanner(tier.label);
+  }
+
+  // robot physics
+  robot.vy += tier.grav * robot.gravDir;
+  robot.y  += robot.vy;
+
+  // Clamp to surfaces — touching either surface just stops vertical motion, never kills
+  if (robot.y + RS >= FLOOR) { robot.y = FLOOR - RS; robot.vy = 0; }
+  if (robot.y      <= CEIL)  { robot.y = CEIL;       robot.vy = 0; }
+
+  // animation
+  animT++;
+  sawRot += 0.07;
+  if (animT % 7 === 0) frameIdx = (frameIdx+1) % 3;
+
+  // spawn
+  spawnTimer++;
+  if (spawnTimer >= spawnInterval) {
+    spawnTimer = 0;
+    spawnInterval = Math.max(tier.spawnMin, spawnInterval - 0.5);
+    spawnWave();
+  }
+
+  const spd = tier.speed;
+
+  for (let o of obstacles) {
+    o.animT = (o.animT||0) + 1;
+
+    // special motion
+    if (o.type === 'saw') {
+      o.y = o.baseY + Math.sin(o.animT * o.bobSpeed + sawRot) * o.bobAmp;
+    }
+    if (o.type === 'spike') {
+      // Continuous sine oscillation — always moving, no phases
+      o.spikeReveal = 0.5 + 0.5 * Math.sin(o.animT * 0.078);
+    }
+    if (o.type === 'laser') {
+      // Cycle: CHARGE (40%) → FLASH (4 frames) → FIRE (40%) → COOLDOWN (16%)
+      const period    = o.beamPeriod;
+      const chargeEnd = Math.floor(period * 0.40);
+      const flashEnd  = chargeEnd + 4;
+      const fireEnd   = Math.floor(period * 0.84);
+      const phase     = o.animT % period;
+
+      if (phase < chargeEnd) {
+        o.laserPhase  = 'charge';
+        o.chargeRatio = phase / chargeEnd;  // 0 → 1
+        o.beamActive  = false;
+      } else if (phase < flashEnd) {
+        o.laserPhase  = 'flash';
+        o.beamActive  = false;
+      } else if (phase < fireEnd) {
+        o.laserPhase  = 'fire';
+        o.beamActive  = true;
+        o.chargeRatio = 1;
+      } else {
+        o.laserPhase  = 'cooldown';
+        o.beamActive  = false;
+        o.chargeRatio = 0;
+      }
+    }
+    if (o.type === 'enemy') {
+      if (o.animT % 10 === 0) o.frame = (o.frame+1) % 2;
+      // Spawn scheduled bullets
+      if (o.shotTimes) {
+        for (let i = o.shotTimes.length - 1; i >= 0; i--) {
+          if (o.animT === o.shotTimes[i]) {
+            // Bullet fires leftward from the gun barrel (left side of enemy)
+            const bx = o.x;
+            const by = o.y + RS * 0.45;
+            o.bullets.push({ x: bx, y: by, vx: -(spd + 5), life: 1 });
+            o.shotTimes.splice(i, 1);
+          }
+        }
+      }
+      // Update bullets
+      if (o.bullets) {
+        for (let b of o.bullets) {
+          b.x += b.vx;
+          b.life -= 0.012;
+          // Bullet collision with robot
+          if (alive &&
+              b.x < robot.x + RS - 4 && b.x + 6 > robot.x + 4 &&
+              b.y > robot.y + 4       && b.y < robot.y + RS - 4) {
+            die('enemy');
+          }
+        }
+        o.bullets = o.bullets.filter(b => b.life > 0 && b.x > -10);
+      }
+    }
+
+    const sMult = o.extraSpeedMult || 1;
+    o.x -= spd * sMult;
+
+    if (!o.passed && o.x + o.w < robot.x) {
+      o.passed = true;
+      score++;
+      document.getElementById('score').textContent = score;
+    }
+
+    // hitbox (forgiving pad)
+    const pad = 5;
+    const rx1 = robot.x + pad, rx2 = robot.x + RS - pad;
+    const ry1 = robot.y + pad, ry2 = robot.y + RS - pad;
+    const ox1 = o.x, ox2 = o.x + o.w;
+    const oy1 = o.y, oy2 = o.y + o.h;
+
+    function aabbHit() {
+      return rx1 < ox2 && rx2 > ox1 && ry1 < oy2 && ry2 > oy1;
+    }
+
+    if (o.type === 'laser') {
+      if (o.beamActive) {
+        const beamY = o.onCeil ? o.y + o.h*0.5 - 2 : o.y + o.h*0.5 - 2;
+        const bThick = 5;
+        if (rx1 < ox1 && ry1 < beamY + bThick && ry2 > beamY - bThick) die('laser');
+      }
+      if (aabbHit()) die('laser');
+    } else if (o.type === 'spike') {
+      // Only lethal when at least 40% emerged
+      if ((o.spikeReveal ?? 1) > 0.4 && aabbHit()) die('spike');
+    } else if (aabbHit()) {
+      die(o.type);
+    }
+  }
+
+  obstacles = obstacles.filter(o => o.x > -RS*4);
+
+  // particles — dust fades faster than death burst
+  for (let p of particles) {
+    p.x += p.vx; p.y += p.vy;
+    p.life -= p.isDust ? 0.10 : 0.05;
+  }
+  particles = particles.filter(p => p.life > 0);
+
+  updateWake();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DRAW HELPERS
+// ═══════════════════════════════════════════════════════════
+function drawSprite(grid, px, py, sc, flipV, flipH) {
+  ctx.save();
+  let tx = px, ty = py;
+  if (flipV) { ctx.translate(px, py + 8*sc); ctx.scale(1,-1); tx=0; ty=0; }
+  if (flipH) { ctx.translate(px + 8*sc, py); ctx.scale(-1,1); tx=0; ty=0; }
+  if (flipV && flipH) {
+    ctx.setTransform(-1,0,0,-1, px+8*sc, py+8*sc); tx=0; ty=0;
+  }
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+    if (grid[r*8+c]) ctx.fillRect(tx+c*sc, ty+r*sc, sc, sc);
+  }
+  ctx.restore();
+}
+
+function drawSpriteRot(grid, cx, cy, sc, angle) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+    if (grid[r*8+c]) ctx.fillRect((c-4)*sc, (r-4)*sc, sc, sc);
+  }
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DRAW OBSTACLES
+// ═══════════════════════════════════════════════════════════
+function drawObstacles() {
+  for (let o of obstacles) {
+    ctx.fillStyle = '#111';
+
+    switch (o.type) {
+      case 'spike': {
+        const reveal = o.spikeReveal ?? 1;
+        // Offset the sprite so the BASE stays glued to the surface
+        // and only the TIP emerges into the zone.
+        // Floor spike: base is at FLOOR, sprite moves up by reveal*RS
+        // Ceil spike:  base is at CEIL,  sprite moves down by reveal*RS
+        const offset = RS * (1 - reveal);
+        const drawY  = o.onCeil ? o.y - offset : o.y + offset;
+        ctx.save();
+        // Clip to the zone so the sprite never bleeds into the surface/wall
+        if (o.onCeil) {
+          ctx.beginPath();
+          ctx.rect(o.x - 2, CEIL, RS + 4, ZONE);
+          ctx.clip();
+        } else {
+          ctx.beginPath();
+          ctx.rect(o.x - 2, CEIL, RS + 4, ZONE);
+          ctx.clip();
+        }
+        drawSprite(SPIKE_UP, o.x, drawY, SCALE, o.onCeil, false);
+        ctx.restore();
+        break;
+      }
+
+      case 'crate':
+        drawSprite(CRATE, o.x, o.y, SCALE, false, false);
+        break;
+
+      case 'stackedCrate':
+        drawSprite(CRATE, o.x, o.y, SCALE, false, false);
+        drawSprite(CRATE, o.x, o.y + RS, SCALE, false, false);
+        break;
+
+      case 'wideCrate':
+        // 2 wide × 2 tall grid of crate sprites
+        drawSprite(CRATE, o.x,      o.y,      SCALE, false, false);
+        drawSprite(CRATE, o.x + RS, o.y,      SCALE, false, false);
+        drawSprite(CRATE, o.x,      o.y + RS, SCALE, false, false);
+        drawSprite(CRATE, o.x + RS, o.y + RS, SCALE, false, false);
+        break;
+
+      case 'enemy': {
+        const frame = ENEMY_FRAMES[o.frame || 0];
+        drawSprite(frame, o.x, o.y, SCALE, o.onCeil, false);
+        // angry eyes glow (white pixels)
+        ctx.fillStyle = '#fff';
+        const eyeOff = o.onCeil ? RS - SCALE*2 : SCALE;
+        ctx.fillRect(o.x + SCALE*2, o.y + eyeOff, SCALE, SCALE);
+        ctx.fillRect(o.x + SCALE*5, o.y + eyeOff, SCALE, SCALE);
+        // gun barrel — small rectangle protruding from left side
+        ctx.fillStyle = '#111';
+        const gunY = o.y + RS * 0.42;
+        ctx.fillRect(o.x - SCALE*2, gunY, SCALE*2, SCALE);     // barrel
+        ctx.fillRect(o.x - SCALE*2, gunY - 2, 4, SCALE + 4);   // muzzle cap
+        // bullets
+        if (o.bullets) {
+          for (let b of o.bullets) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, b.life * 3);
+            ctx.fillStyle = '#111';
+            ctx.fillRect(b.x - 3, b.y - 2, 6, 4);   // bullet rect
+            ctx.fillRect(b.x - 5, b.y - 1, 3, 2);   // tail
+            ctx.restore();
+          }
+        }
+        ctx.fillStyle = '#111';
+        break;
+      }
+
+      case 'saw':
+        drawSpriteRot(SAW, o.x + RS/2, o.y + RS/2, SCALE, sawRot);
+        // center dot
+        ctx.fillRect(o.x + RS/2 - 2, o.y + RS/2 - 2, 4, 4);
+        break;
+
+      case 'laser': {
+        const phase   = o.laserPhase || 'cooldown';
+        const emitSc  = SCALE * 0.9;
+        const emitH   = RS * 0.9;
+        const beamY   = o.y + emitH * 0.5;
+
+        // ── Emitter sprite ──
+        drawSprite(LASER_EMITTER, o.x, o.y, emitSc, o.onCeil, false);
+
+        // ── Charge bar — always floating just inside the zone above the emitter ──
+        if (phase === 'charge' || phase === 'flash') {
+          const barW  = RS * 0.9;
+          const barH  = 5;
+          const barX  = o.x;
+          // Always sits just inside the play zone, 6px from the surface
+          const barY  = o.onCeil ? CEIL + 6 : FLOOR - barH - 6;
+          const ratio = o.chargeRatio || 0;
+
+          // background track
+          ctx.fillStyle = '#ddd';
+          ctx.fillRect(barX, barY, barW, barH);
+          // fill — flickers fast near 100%
+          const flicker = ratio > 0.85 ? (Math.floor(o.animT / 2) % 2 === 0 ? 1 : 0.5) : 1;
+          ctx.globalAlpha = flicker;
+          ctx.fillStyle = '#111';
+          ctx.fillRect(barX, barY, barW * ratio, barH);
+          ctx.globalAlpha = 1;
+        }
+
+        // ── Muzzle flash (4-frame burst at beam origin) ──
+        if (phase === 'flash') {
+          const fx = o.x;
+          const fy = beamY;
+          ctx.save();
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = '#111';
+          // cross-shaped flash
+          ctx.fillRect(fx - 14, fy - 2, 14, 4);
+          ctx.fillRect(fx - 6,  fy - 6,  4, 12);
+          ctx.restore();
+        }
+
+        // ── Active beam ──
+        if (phase === 'fire') {
+          const alpha = 0.75 + 0.25 * Math.sin(o.animT * 0.5);
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = '#111';
+          ctx.fillRect(0, beamY - 3, o.x, 6);
+          ctx.fillStyle = '#444';
+          ctx.fillRect(0, beamY - 1, o.x, 2);
+          ctx.restore();
+        }
+        break;
+      }
+
+      case 'missile': {
+        ctx.save();
+        ctx.translate(o.x + o.w/2, o.y + o.h/2);
+        // draw missile pointing left (flipped H)
+        for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+          if (MISSILE[r*8+c]) {
+            ctx.fillRect(-(c+1)*SCALE + SCALE*4, (r-4)*SCALE, SCALE, SCALE);
+          }
+        }
+        // exhaust flame
+        const flameSize = (2 + Math.sin(o.animT*0.5)) * SCALE * 0.5;
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = '#555';
+        ctx.fillRect(SCALE*4, -flameSize/2, flameSize*2, flameSize);
+        ctx.restore();
+        break;
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DRAW
+// ═══════════════════════════════════════════════════════════
+// Scrolling offset accumulator — driven by actual game speed each frame
+let bgScrollX = 0;
+
+function drawBG() {
+  // ── Outside zone: very faint grid ──
+  ctx.strokeStyle = '#f2f2f2';
+  ctx.lineWidth = 1;
+  const gridStep = 44;
+  const gOff = bgScrollX % gridStep;
+  for (let x = -gOff; x < W; x += gridStep) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CEIL - 5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, FLOOR + 5); ctx.lineTo(x, H); ctx.stroke();
+  }
+
+  // ── Zone background: slightly tinted ──
+  ctx.fillStyle = '#f9f9f9';
+  ctx.fillRect(0, CEIL, W, ZONE);
+
+  // ── Speed lines inside zone ──
+  // Two layers at different densities for parallax feel
+  const spd = alive ? (tier.speed + score * 0.008) : 4;
+
+  // Layer 1 – sparse, slightly darker, wider spacing
+  const step1 = 60;
+  const off1  = bgScrollX % step1;
+  ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+  ctx.lineWidth = 1;
+  for (let x = -off1; x < W; x += step1) {
+    ctx.beginPath(); ctx.moveTo(x, CEIL); ctx.lineTo(x, FLOOR); ctx.stroke();
+  }
+
+  // Layer 2 – denser, lighter, faster scroll (×1.7 parallax)
+  const step2 = 28;
+  const off2  = (bgScrollX * 1.7) % step2;
+  ctx.strokeStyle = 'rgba(0,0,0,0.04)';
+  ctx.lineWidth = 1;
+  for (let x = -off2; x < W; x += step2) {
+    ctx.beginPath(); ctx.moveTo(x, CEIL); ctx.lineTo(x, FLOOR); ctx.stroke();
+  }
+
+  // Layer 3 – horizontal dashes that emphasise horizontal speed
+  const step3 = 18;
+  const off3  = bgScrollX % step3;
+  ctx.setLineDash([6, 12]);
+  ctx.strokeStyle = 'rgba(0,0,0,0.035)';
+  ctx.lineWidth = 1;
+  for (let y = CEIL + 18; y < FLOOR - 10; y += step3) {
+    ctx.beginPath(); ctx.moveTo(-off3, y); ctx.lineTo(W + step3, y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Advance scroll accumulator
+  if (alive) bgScrollX += spd;
+}
+
+function drawSurfaces() {
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, FLOOR, W, 5);
+  ctx.fillRect(0, CEIL - 5, W, 5);
+
+  // Pixel-art edge detail — small tick marks along both surfaces
+  ctx.fillStyle = '#fff';
+  const tickStep = 16;
+  const tOff = Math.floor(bgScrollX) % tickStep;
+  for (let x = -tOff; x < W; x += tickStep) {
+    ctx.fillRect(x, FLOOR,     2, 2);
+    ctx.fillRect(x, CEIL - 2,  2, 2);
+  }
+}
+
+// Wake color by tier level (tier index = level - 1)
+function wakeColor() {
+  const idx = TIERS.indexOf(tier);
+  if (idx >= 8) return '#FFB800'; // L9+  gold
+  if (idx >= 6) return '#FF00FF'; // L7–8 magenta
+  if (idx >= 4) return '#00E5FF'; // L5–6 cyan
+  if (idx >= 2) return '#3B82F6'; // L3–4 blue
+  return '#111';                  // L1–2 black
+}
+
+// ── Wake trail — stream of pixels that flow backward from the robot ──
+let wakeParticles = [];
+
+function updateWake() {
+  if (!alive) { wakeParticles = []; return; }
+
+  const col = wakeColor();
+  for (let i = 0; i < 2; i++) {
+    wakeParticles.push({
+      x:    robot.x + 2,
+      y:    robot.y + RS * 0.3 + Math.random() * RS * 0.4,
+      vx:   -(1.5 + Math.random() * 1.5),
+      vy:   (Math.random() - 0.5) * 0.4,
+      life: 1,
+      size: 1 + Math.random() * 2,
+      color: col,
+    });
+  }
+
+  for (let p of wakeParticles) {
+    p.x    += p.vx;
+    p.y    += p.vy;
+    p.life -= 0.018;
+  }
+  wakeParticles = wakeParticles.filter(p => p.life > 0);
+}
+
+function drawWake() {
+  for (let p of wakeParticles) {
+    ctx.save();
+    ctx.globalAlpha = p.life * p.life * 0.5;
+    ctx.fillStyle   = p.color || '#111';
+    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawRobot() {
+  if (!alive && particles.length === 0) return;
+  if (!alive) return;
+
+  ctx.save();
+  ctx.fillStyle = '#111';
+
+  if (robot.spinning) {
+    robot.spinT++;
+    const progress = robot.spinT / robot.spinDur;
+    const angle    = progress * Math.PI;          // 0 → π: one clean flip
+    const scaleY   = Math.cos(angle);             // 1 → 0 → -1
+    const cx = robot.x + RS / 2;
+    const cy = robot.y + RS / 2;
+
+    ctx.translate(cx, cy);
+    ctx.scale(1, Math.abs(scaleY) < 0.05 ? (scaleY < 0 ? -0.05 : 0.05) : scaleY);
+    ctx.translate(-cx, -cy);
+
+    // flipV: starts as pre-flip orientation, inverts once scaleY goes negative
+    const flipV = scaleY < 0 ? (robot.gravDir === 1) : (robot.gravDir === -1);
+    drawSprite(ROBOT_RUN[frameIdx], robot.x, robot.y, SCALE, flipV, false);
+
+    // Antenna — drawn inside the same transform so it spins with the robot
+    if (Math.floor(animT / 20) % 2 === 0) {
+      const ax = robot.x + RS * 0.62;
+      const ay = flipV ? robot.y + RS : robot.y - SCALE;
+      ctx.fillRect(ax, ay, 2, SCALE);
+      ctx.fillRect(ax - 1, flipV ? ay + SCALE : ay - 3, 4, 3);
+    }
+
+    if (robot.spinT >= robot.spinDur) robot.spinning = false;
+  } else {
+    drawSprite(ROBOT_RUN[frameIdx], robot.x, robot.y, SCALE, robot.gravDir === -1, false);
+
+    // Antenna — normal, outside spin
+    if (Math.floor(animT / 20) % 2 === 0) {
+      const ax = robot.x + RS * 0.62;
+      const ay = robot.gravDir === 1 ? robot.y - SCALE : robot.y + RS;
+      ctx.fillRect(ax, ay, 2, SCALE);
+      ctx.fillRect(ax - 1, robot.gravDir === 1 ? ay - 3 : ay + SCALE, 4, 3);
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawParticles() {
+  for (let p of particles) {
+    ctx.save();
+    if (p.isDust) {
+      // Dust: small, slightly spread rectangles, fade faster
+      ctx.globalAlpha = p.life * 0.7;
+      ctx.fillStyle = '#555';
+      const sz = 2 + p.life * 2;
+      ctx.fillRect(p.x - sz/2, p.y - sz/2, sz, sz);
+    } else {
+      // Death burst: square pixels, full opacity
+      ctx.globalAlpha = p.life * 0.9;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGravArrow() {
+  if (!alive) return;
+  const cx = robot.x + RS/2;
+  const surface = robot.gravDir === 1 ? FLOOR : CEIL;
+  const dir = robot.gravDir;
+  const dist = Math.abs(robot.y + (dir===1?RS:0) - surface);
+  const alpha = Math.max(0, 1 - dist/(ZONE*0.5)) * 0.3;
+  if (alpha < 0.02) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2;
+  const ay = dir === 1 ? FLOOR + 12 : CEIL - 12;
+  ctx.beginPath();
+  ctx.moveTo(cx, ay);
+  ctx.lineTo(cx, ay + dir*10);
+  ctx.moveTo(cx-4, ay+dir*6); ctx.lineTo(cx, ay+dir*10);
+  ctx.moveTo(cx+4, ay+dir*6); ctx.lineTo(cx, ay+dir*10);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GAME STATE MACHINE  (intro | playing | paused | dead)
+// ═══════════════════════════════════════════════════════════
+let gameState = 'intro';  // 'intro' | 'playing' | 'paused' | 'dead'
+let introFlash = 0;       // frame counter for blink
+
+// ── Intro: draw the idle world behind "CLICK TO START" ──
+function drawIntro() {
+  // Idle scene — robot standing, no obstacles
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H);
+  drawBG();       // scrolls slowly even on intro (bgScrollX advances below)
+  drawSurfaces();
+
+  // Idle robot standing on floor
+  ctx.fillStyle = '#111';
+  drawSprite(ROBOT_RUN[0], W*0.15, FLOOR - RS, SCALE, false, false);
+
+  // Title
+  ctx.fillStyle = '#111';
+  ctx.font = 'bold 52px "Share Tech Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('GRAV-BOT', W/2, H/2 - 30);
+
+  // Flashing "CLICK TO START"
+  introFlash++;
+  if (Math.floor(introFlash / 28) % 2 === 0) {
+    ctx.font = '13px "Share Tech Mono", monospace';
+    ctx.fillStyle = '#999';
+    ctx.letterSpacing = '0.2em';
+    ctx.fillText('CLICK  /  SPACE  TO  START', W/2, H/2 + 20);
+  }
+
+  // Slow idle scroll
+  bgScrollX += 1.8;
+}
+
+// ── Pause overlay drawn on canvas (dimmed world beneath) ──
+function drawPauseOverlay() {
+  // Already visible via CSS #pause-screen — nothing extra needed on canvas
+}
+
+// ── Main loop ──
+function loop() {
+  if (gameState === 'intro') {
+    drawIntro();
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  if (gameState === 'paused') {
+    // Freeze — just keep rAF alive so we can resume
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  // playing / dead — normal render + update
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0,0,W,H);
+
+  drawBG();
+  drawSurfaces();
+  drawGravArrow();
+  drawObstacles();
+  drawWake();
+  drawRobot();
+  drawParticles();
+
+  update();
+  requestAnimationFrame(loop);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAUSE / RESUME
+// ═══════════════════════════════════════════════════════════
+function pauseGame() {
+  if (gameState !== 'playing') return;
+  gameState = 'paused';
+  document.getElementById('pause-screen').classList.add('visible');
+  document.getElementById('pause-btn').textContent = '▶ RESUME';
+}
+
+function resumeGame() {
+  if (gameState !== 'paused') return;
+  gameState = 'playing';
+  document.getElementById('pause-screen').classList.remove('visible');
+  document.getElementById('pause-btn').textContent = '❚❚ PAUSE';
+}
+
+function togglePause() {
+  if (gameState === 'playing') pauseGame();
+  else if (gameState === 'paused') resumeGame();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LANDSCAPE GUARD
+// ═══════════════════════════════════════════════════════════
+function checkOrientation() {
+  const isPortrait = window.innerHeight > window.innerWidth;
+  document.getElementById('rotate-screen').classList.toggle('show', isPortrait);
+  if (!isPortrait && gameState === 'paused-for-rotate') {
+    gameState = 'playing';
+    document.getElementById('rotate-screen').classList.remove('show');
+  }
+  if (isPortrait && gameState === 'playing') {
+    gameState = 'paused-for-rotate';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+resize();
+checkOrientation();
+window.addEventListener('resize', () => {
+  resize();
+  checkOrientation();
+});
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => { resize(); checkOrientation(); }, 120);
+});
+
+// Universal input handler
+function handleInput(e) {
+  // Never let button clicks bubble to game
+  if (e.target.closest('button')) return;
+
+  if (gameState === 'intro') {
+    gameState = 'playing';
+    initGame();
+    document.getElementById('pause-btn').classList.add('visible');
+    return;
+  }
+  if (gameState === 'playing') {
+    flip();
+    return;
+  }
+  if (gameState === 'paused') {
+    resumeGame();
+    return;
+  }
+}
+
+document.addEventListener('click', handleInput);
+document.addEventListener('touchstart', e => {
+  if (e.target.closest('button')) return;   // let buttons fire their click
+  e.preventDefault();                       // suppress delayed synthetic click
+  handleInput(e);
+}, { passive: false });
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    handleInput(e);
+  }
+  if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
+});
+
+document.getElementById('pause-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  togglePause();
+});
+document.getElementById('resume-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  resumeGame();
+});
+document.getElementById('restart-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  resize();
+  gameState = 'playing';
+  document.getElementById('pause-btn').classList.add('visible');
+  initGame();
+});
+
+// Start with idle intro loop
+loop();
+</script>
+</body>
+</html>
