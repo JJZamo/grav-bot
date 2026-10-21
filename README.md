@@ -1,3 +1,5 @@
+![GRAV-BOT](assets/logo.png)
+
 # GRAV-BOT
 
 Juego de pixel art en blanco y negro: un robot corre sin parar y cada toque invierte la gravedad entre piso y techo.
