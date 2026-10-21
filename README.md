@@ -9,6 +9,7 @@ Juego de pixel art en blanco y negro: un robot corre sin parar y cada toque invi
 ## Controles
 - Toque / click / Space: invertir gravedad
 - P o Esc: pausa
+- M o botón SOUND: silenciar
 
 ## iPhone
 Abrir el link en Safari → Compartir → "Agregar a pantalla de inicio" para jugar en pantalla completa como app. Jugar en horizontal.
